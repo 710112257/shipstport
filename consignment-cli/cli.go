@@ -5,14 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"google.golang.org/grpc"
+	"github.com/micro/go-micro"
+	"github.com/micro/go-micro/registry"
+	"github.com/micro/go-plugins/registry/etcdv3"
 	"io/ioutil"
 	"log"
-	"os"
+	"sync"
+	"time"
 )
 
 const (
-	ADDRESS           = "localhost:50051"
 	DEFAULT_INFO_FILE = "consignment.json"
 )
 
@@ -30,45 +32,50 @@ func parseFile(fileName string) (*pb.Consignment, error) {
 	return consignment, nil
 }
 
+var (
+	s sync.WaitGroup
+	num = 3
+)
+
 func main() {
-	// 连接到 gRPC 服务器
-	conn, err := grpc.Dial(ADDRESS, grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("connect error: %v", err)
-	}
-	defer conn.Close()
+	reg := etcdv3.NewRegistry(func(op *registry.Options) {
+		op.Addrs = []string{
+			"192.168.16.100:2888",
+		}
+	})
+	service := micro.NewService(
+		micro.Registry(reg),
+	)
+	service.Init()
 
-	// 初始化 gRPC 客户端
-	client := pb.NewShippingServiceClient(conn)
-
-	// 在命令行中指定新的货物信息 json 文件
-	infoFile := DEFAULT_INFO_FILE
-	if len(os.Args) > 1 {
-		infoFile = os.Args[1]
-	}
+	client := pb.NewShippingService("go.micro.srv.consignment", service.Client())
 
 	// 解析货物信息
-	consignment, err := parseFile(infoFile)
+	consignment, err := parseFile(DEFAULT_INFO_FILE)
 	if err != nil {
 		log.Fatalf("parse info file error: %v", err)
 	}
 
-	// 调用 RPC
-	// 将货物存储到我们自己的仓库里
-	resp, err := client.CreateConsignment(context.Background(), consignment)
-	if err != nil {
-		log.Fatalf("create consignment error: %v", err)
+
+	s.Add(num)
+	for i := 0; i < num; i++ {
+		go func(j int) {
+			r, err := client.CreateConsignment(context.TODO(), consignment)
+			if err != nil {
+				log.Fatalf("Could not create: %v", err)
+			}
+			log.Printf("Created: %t %d", r.Created, j)
+			getAll, err := client.GetConsignments(context.TODO(), &pb.GetRequest{})
+			if err != nil {
+				log.Fatalf("Could not list consignments: %v", err)
+			}
+			for _, v := range getAll.Consignments {
+				log.Println(v)
+			}
+			s.Done()
+		}(i)
+		time.Sleep(time.Second / 2)
 	}
 
-	// 新货物是否托运成功
-	log.Printf("created: %t", resp.Created)
-
-	// 列出目前所有托运的货物
-	resp, err = client.GetConsignments(context.Background(), &pb.GetRequest{})
-	if err != nil {
-		log.Fatalf("failed to list consignments: %v", err)
-	}
-	for _, c := range resp.Consignments {
-		log.Printf("%+v", c)
-	}
+	s.Wait()
 }

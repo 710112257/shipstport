@@ -1,0 +1,26 @@
+[
+  {
+    "id": "This is a test vessel1",
+    "capacity": 1000,
+    "max_weight": 100000,
+    "name": "vessel001",
+    "available": true,
+    "ower_id": "央行国际"
+  },
+  {
+    "id": "This is a test vessel2",
+    "capacity": 1000,
+    "max_weight": 100000,
+    "name": "vessel002",
+    "available": true,
+    "ower_id": "央行国际"
+  },
+  {
+    "id": "This is a test vessel3",
+    "capacity": 1000,
+    "max_weight": 100000,
+    "name": "vessel003",
+    "available": true,
+    "ower_id": "央行国际"
+  }
+]
